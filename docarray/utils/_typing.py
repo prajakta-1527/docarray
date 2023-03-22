@@ -27,8 +27,11 @@ def change_cls_name(cls: type, new_name: str, scope: Optional[dict] = None) -> N
     :param cls: the class to change the name of
     :param new_name: the new name
     :param scope: the scope in which the class is defined
+    :return: the class with the new name
     """
     if scope:
         scope[new_name] = cls
     cls.__qualname__ = cls.__qualname__[: -len(cls.__name__)] + new_name
     cls.__name__ = new_name
+
+    return cls
