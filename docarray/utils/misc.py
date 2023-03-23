@@ -23,7 +23,7 @@ def get_hnswlib():
         import hnswlib
 
         return hnswlib
-    except ImportError:
+    except (ImportError, ModuleNotFoundError):
         raise RuntimeError(
             "Hnswlib is not installed. To install all the necessary libraries to use the hnsw backend, "
             "please do: `pip install docarray[hnswlib]`."
