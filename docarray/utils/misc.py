@@ -18,8 +18,24 @@ else:
     tf_imported = True
 
 
+try:
+    import hnswlib  # type: ignore # noqa: F401
+except (ImportError, TypeError):
+    hnswlib_imported = False
+else:
+    hnswlib_imported = True
+
+
 def is_torch_available():
     return torch_imported
+
+
+def is_tf_available():
+    return tf_imported
+
+
+def is_hnswlib_available():
+    return hnswlib_imported
 
 
 def is_np_int(item: Any) -> bool:
@@ -31,10 +47,6 @@ def is_np_int(item: Any) -> bool:
         except TypeError:
             return False
     return False  # this is unreachable, but mypy wants it
-
-
-def is_tf_available():
-    return tf_imported
 
 
 def is_notebook() -> bool:
