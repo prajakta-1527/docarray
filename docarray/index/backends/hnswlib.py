@@ -31,18 +31,14 @@ from docarray.index.abstract import (
 from docarray.proto import DocumentProto
 from docarray.utils.filter import filter_docs
 from docarray.utils.find import _FindResult
-from docarray.utils.misc import is_hnswlib_available, is_np_int, is_torch_available
+from docarray.utils.misc import get_hnswlib, is_np_int, is_torch_available
 
 TSchema = TypeVar('TSchema', bound=BaseDocument)
 T = TypeVar('T', bound='HnswDocumentIndex')
 
-if is_hnswlib_available():
-    import hnswlib
-else:
-    raise RuntimeError(
-        "Hnswlib is not installed. To install all the necessary libraries to use the hnsw backend, "
-        "please do: `pip install docarray[hnswlib]`."
-    )
+
+hnswlib = get_hnswlib()
+
 
 HNSWLIB_PY_VEC_TYPES = [list, tuple, np.ndarray]
 if is_torch_available():

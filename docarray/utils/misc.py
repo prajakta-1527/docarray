@@ -18,12 +18,16 @@ else:
     tf_imported = True
 
 
-try:
-    import hnswlib  # type: ignore # noqa: F401
-except (ImportError, TypeError):
-    hnswlib_imported = False
-else:
-    hnswlib_imported = True
+def get_hnswlib():
+    try:
+        import hnswlib
+
+        return hnswlib
+    except ImportError:
+        raise RuntimeError(
+            "Hnswlib is not installed. To install all the necessary libraries to use the hnsw backend, "
+            "please do: `pip install docarray[hnswlib]`."
+        )
 
 
 def is_torch_available():
@@ -32,10 +36,6 @@ def is_torch_available():
 
 def is_tf_available():
     return tf_imported
-
-
-def is_hnswlib_available():
-    return hnswlib_imported
 
 
 def is_np_int(item: Any) -> bool:
