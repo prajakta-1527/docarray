@@ -26,15 +26,15 @@ pydub = {version = "^0.25.1", optional = true }
 pandas = {version = ">=1.1.0", optional = true }
 
 [tool.poetry.extras]
-common = ["protobuf", "lz4"]
-torch = ["torch"]
+common = ["protobuf", "lz4", "pandas"]
 image = ["pillow", "types-pillow"]
 video = ["av"]
 audio = ["pydub"]
 mesh = ["trimesh"]
-web = ["fastapi"]
+all_modalities = ["pillow", "types-pillow", "av", "pydub", "trimesh"]
 hnswlib = ["hnswlib"]
-pandas = ["pandas"]
+torch = ["torch"]
+web = ["fastapi"]
 
 [tool.poetry.dev-dependencies]
 pytest = ">=7.0"
