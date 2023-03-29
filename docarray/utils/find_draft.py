@@ -1,7 +1,11 @@
-from typing import Any, Dict, List, NamedTuple, Optional, Type, Union, cast
+from typing import Any, Dict, List, NamedTuple, Optional, Type, Union, cast, Tuple, Callable, Generator, TypeVar
 
 from typing_inspect import is_union_type
+from contextlib import nullcontext
+from math import ceil
+from multiprocessing.pool import Pool, ThreadPool
 
+from rich.progress import track
 from docarray.array.abstract_array import AnyDocArray
 from docarray.array.array.array import DocArray
 from docarray.array.stacked.array_stacked import DocArrayStacked
@@ -9,17 +13,18 @@ from docarray.base_doc import BaseDoc
 from docarray.helper import _get_field_type_by_access_path
 from docarray.typing import AnyTensor
 from docarray.typing.tensor.abstract_tensor import AbstractTensor
-
+from docarray.utils.map import map_docs_batch
 
 class FindResult(NamedTuple):
     documents: DocArray
     scores: AnyTensor
 
-
 class _FindResult(NamedTuple):
     documents: Union[DocArray, List[Dict[str, Any]]]
     scores: AnyTensor
 
+class Doc(BaseDoc):
+    embedding: AnyTensor=None
 
 def find(
     index: AnyDocArray,
@@ -52,7 +57,7 @@ def find(
 
         from docarray import DocArray, BaseDoc
         from docarray.typing import TorchTensor
-        from docarray.util.find import find
+        from docarray.utils.find import find
 
 
         class MyDocument(BaseDoc):
@@ -68,7 +73,6 @@ def find(
         top_matches, scores = find(
             index=index,
             query=query,
-            embedding_field='tensor',
             metric='cosine_sim',
         )
 
@@ -77,7 +81,6 @@ def find(
         top_matches, scores = find(
             index=index,
             query=query,
-            embedding_field='tensor',
             metric='cosine_sim',
         )
 
@@ -103,6 +106,7 @@ def find(
         index=index,
         query=query,
         embedding_field=embedding_field,
+        batch_size=None,
         metric=metric,
         limit=limit,
         device=device,
@@ -114,10 +118,16 @@ def find_batched(
     index: AnyDocArray,
     query: Union[AnyTensor, DocArray],
     embedding_field: str = 'embedding',
+    batch_size: int=1,
     metric: str = 'cosine_sim',
     limit: int = 10,
     device: Optional[str] = None,
     descending: Optional[bool] = None,
+    backend: str = 'thread',
+    num_worker: Optional[int] = None,
+    shuffle: bool = False,
+    pool: Optional[Union[Pool, ThreadPool]] = None,
+    show_progress: bool = False,
 ) -> List[FindResult]:
     """
     Find the closest Documents in the index to the queries.
@@ -154,10 +164,9 @@ def find_batched(
 
         # use DocArray as query
         query = DocArray[MyDocument]([MyDocument(embedding=torch.rand(128)) for _ in range(3)])
-        results = find(
+        results = find_batched(
             index=index,
             query=query,
-            embedding_field='tensor',
             metric='cosine_sim',
         )
         top_matches, scores = results[0]
@@ -189,30 +198,92 @@ def find_batched(
         where the first element contains the closes matches for each query,
         and the second element contains the corresponding scores.
     """
+        
     if descending is None:
         descending = metric.endswith('_sim')  # similarity metrics are descending
 
     embedding_type = _da_attr_type(index, embedding_field)
     comp_backend = embedding_type.get_comp_backend()
+    # if(type(query)==AnyTensor):
 
+    # def _extract_embeddings_core(query: Union[AnyDocArray, BaseDoc, AnyTensor]):
+    #     return _extract_embeddings(query, embedding_field, embedding_type)
+    
     # extract embeddings from query and index
     index_embeddings = _extract_embeddings(index, embedding_field, embedding_type)
-    query_embeddings = _extract_embeddings(query, embedding_field, embedding_type)
 
-    # compute distances and return top results
+    # query_embeddings = list(map_docs_batch(da=query,
+    #                                     func=_extract_embeddings_core,
+    #                                     batch_size=batch_size,
+    #                                     backend=backend,
+    #                                     num_worker=num_worker,
+    #                                     shuffle=shuffle,
+    #                                     pool=pool,
+    #                                     show_progress=show_progress))
+    
     metric_fn = getattr(comp_backend.Metrics, metric)
-    dists = metric_fn(query_embeddings, index_embeddings, device=device)
-    top_scores, top_indices = comp_backend.Retrieval.top_k(
-        dists, k=limit, device=device, descending=descending
-    )
 
+    
     results = []
-    for indices_per_query, scores_per_query in zip(top_indices, top_scores):
+    # compute distances and return top results
+    def _metric_func_core(query: Union[AnyDocArray, BaseDoc, AnyTensor]):
+        q_embed = _extract_embeddings(query, embedding_field, embedding_type)
+        dists=metric_fn(q_embed, index_embeddings, device=device)
+        top_scores, top_indices = comp_backend.Retrieval.top_k(
+            dists, k=limit, device=device, descending=descending
+        )
+        # print("y")
+        return top_indices,top_scores
+    
+    if batch_size is not None:
+        if batch_size <= 0:
+            raise ValueError(
+                f'`batch_size` must be larger than 0, receiving {batch_size}'
+            )
+        else:
+            batch_size = int(batch_size)
+    else :
+        # print("nn")
+        top_indices,top_scores= _metric_func_core(query)
+        res = []
+        for indices_per_query, scores_per_query in zip(top_indices, top_scores):
+            docs_per_query: DocArray = DocArray([])
+            for idx in indices_per_query:  # workaround until #930 is fixed
+                docs_per_query.append(index[idx])
+            docs_per_query = DocArray(docs_per_query)
+            res.append(FindResult(scores=scores_per_query, documents=docs_per_query))
+        return res
+    
+    if not(isinstance(query, DocArray) or isinstance(query, (DocArrayStacked, BaseDoc))):
+      # treat data as tensor
+        query = cast(AnyTensor, query)
+        # Image(url='http://url.com/foo.png') for _ in range(10)
+
+        d = DocArray[Doc](Doc() for _ in range(comp_backend.shape(tensor=query)[0]))
+        # d = DocArray[Doc](comp_backend.shape(tensor=query)[0])
+        d.embedding = query
+        query=d
+
+
+    it = map_docs_batch(da=query,func=_metric_func_core, batch_size=batch_size,
+                                        backend=backend,
+                                        num_worker=num_worker,
+                                        shuffle=shuffle,
+                                        pool=pool,
+                                        show_progress=show_progress)
+    # dists : Tuple[T,T]
+    for (indices_per_query, scores_per_query) in it:
         docs_per_query: DocArray = DocArray([])
-        for idx in indices_per_query:  # workaround until #930 is fixed
-            docs_per_query.append(index[idx])
-        docs_per_query = DocArray(docs_per_query)
-        results.append(FindResult(scores=scores_per_query, documents=docs_per_query))
+        for idx,scores in zip(indices_per_query,scores_per_query):  # workaround until #930 is fixed
+            docs_per_query=(index[idx])
+            # print(idx)
+            # print(scores)
+            results.append(FindResult(scores=scores, documents=docs_per_query))
+        # docs_per_query = DocArray(docs_per_query)
+    # for i, d in enumerate(it):
+    #     dists
+    # dists = metric_fn(query_embeddings, index_embeddings, device=device)
+    # print(results)
     return results
 
 
