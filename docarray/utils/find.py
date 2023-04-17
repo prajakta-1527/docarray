@@ -13,7 +13,7 @@ from docarray.base_doc import BaseDoc
 from docarray.helper import _get_field_type_by_access_path
 from docarray.typing import AnyTensor
 from docarray.typing.tensor.abstract_tensor import AbstractTensor
-from docarray.utils.map import map_docs_batched, _map_docs_batched_multiarg
+from docarray.utils.map import _map_docs_batched_multiarg
 
 
 class FindResult(NamedTuple):

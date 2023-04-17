@@ -301,10 +301,10 @@ def _map_docs_batched_multiarg(
         context_pool = p
 
     args_list = []
-    l = ceil(len(docs) / batch_size)
+    no_of_batches = ceil(len(docs) / batch_size)
 
     for i in func_args.values():
-        ls = [i for k in range(l)]
+        ls = [i for k in range(no_of_batches)]
         args_list.append(ls)
 
     with context_pool:
