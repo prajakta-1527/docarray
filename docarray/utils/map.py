@@ -186,21 +186,22 @@ def map_docs_batched(
         raise ValueError(
             f'Multiprocessing does not allow functions that are local, lambda or partial: {func}'
         )
+    if __name__ == '__main__':
 
-    context_pool: Union[nullcontext, Union[Pool, ThreadPool]]
-    if pool:
-        p = pool
-        context_pool = nullcontext()
-    else:
-        p = _get_pool(backend, num_worker)
-        context_pool = p
+        context_pool: Union[nullcontext, Union[Pool, ThreadPool]]
+        if pool:
+            p = pool
+            context_pool = nullcontext()
+        else:
+            p = _get_pool(backend, num_worker)
+            context_pool = p
 
-    with context_pool:
-        imap = p.imap(func, docs._batch(batch_size=batch_size, shuffle=shuffle))
-        for x in track(
-            imap, total=ceil(len(docs) / batch_size), disable=not show_progress
-        ):
-            yield x
+        with context_pool:
+            imap = p.imap(func, docs._batch(batch_size=batch_size, shuffle=shuffle))
+            for x in track(
+                imap, total=ceil(len(docs) / batch_size), disable=not show_progress
+            ):
+                yield x
 
 
 def _map_docs_batched_multiarg(
@@ -315,13 +316,14 @@ def _map_docs_batched_multiarg(
         ls = ls + per_batch_args
 
         args_list.append(ls)
+    if __name__ == '__main__':
 
-    with context_pool:
-        starmap = p.starmap(func, args_list)
-        for x in track(
-            starmap, total=ceil(len(docs) / batch_size), disable=not show_progress
-        ):
-            yield x
+        with context_pool:
+            starmap = p.starmap(func, args_list)
+            for x in track(
+                starmap, total=ceil(len(docs) / batch_size), disable=not show_progress
+            ):
+                yield x
 
 
 def _get_pool(backend, num_worker) -> Union[Pool, ThreadPool]:
